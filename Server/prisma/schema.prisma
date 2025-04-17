@@ -1,0 +1,234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+/// Enums for fields with limited values
+
+enum UserRole {
+  user
+  admin
+}
+
+enum AccountStatus {
+  active
+  pending
+  suspended
+}
+ 
+enum OrderStatus {
+ pending
+ rejected
+ approved
+ flagged
+}
+
+enum OrderProgressStatus {
+  pending
+  processing
+  cancelled
+}
+
+enum PaymentMethod {
+  card
+  paypal
+  bank_transfer
+  crypto
+}
+
+enum PaymentStatus {
+  pending
+  completed
+  failed
+}
+
+enum SupportTicketPriority {
+  high
+  medium
+  low
+}
+
+enum SupportTicketStatus {
+  open
+  in_progress
+  resolved
+  closed
+}
+
+enum NotificationType {
+  user_registered
+  order_created
+  order_update
+  order_completed
+  payment
+  support
+  system
+  //
+}
+
+enum NotificationStatus {
+  unread
+  read
+}
+
+/// Models
+
+model User {
+  id               Int               @id @default(autoincrement())
+  fullName         String            @map("full_name")
+  email            String            @unique
+  password         String            @map("password")
+  phone            String?           @map("phone")
+  role             UserRole          @default(user)
+  icon             String?
+  accountStatus    AccountStatus     @default(pending) @map("account_status")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  lastLogin        DateTime?         @map("last_login")
+  // Relations
+  activityLogs     UserActivity[]
+  orders           Order[]
+  payments         Payment[]
+  supportTickets   SupportTicket[]
+  supportResponses SupportResponse[]
+  notifications    Notification[]
+  systemLogs       SystemLog[]       @relation("AdminLogs")
+
+  Review Review[]
+}
+
+model UserActivity {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  action    String
+  timestamp DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Service {
+  id          Int     @id @default(autoincrement())
+  name        String
+  category    String
+  image       String
+  description String
+  price       Decimal
+  icon        String?
+  isActive    Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  orders Order[] // Orders associated with this service
+}
+
+model Order {
+  orderNumber            String      @id @unique @map("order_number")
+  userId                 Int         @map("user_id")
+  serviceId              Int         @map("service_id")
+  projectName            String
+  projectDescription     String
+  status                 OrderStatus @default(pending)
+  budget                 Decimal     @map("total_amount")
+  additionalRequirements String?
+  attachments            Json? // Allows storing an array of file paths/URLs
+  deadline               DateTime?   @map("deadline")
+  createdAt              DateTime    @default(now()) @map("created_at")
+  updatedAt              DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  user     User            @relation(fields: [userId], references: [id])
+  service  Service         @relation(fields: [serviceId], references: [id])
+  progress OrderProgress[]
+  payments Payment[]
+  reviews  Review[]
+}
+
+model OrderProgress {
+  id        Int                 @id @default(autoincrement())
+  orderId   String              @map("order_id")
+  status    OrderProgressStatus
+  updatedAt DateTime            @default(now()) @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [orderNumber])
+}
+
+model Payment {
+  transactionId String        @unique @map("transaction_id")
+  userId        Int
+  orderId       String        @map("order_id")
+  paymentMethod PaymentMethod
+  status        PaymentStatus @default(pending)
+  amount        Decimal
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id])
+  order Order @relation(fields: [orderId], references: [orderNumber])
+}
+
+model SupportTicket {
+  id          Int                   @id @default(autoincrement())
+  userId      Int
+  subject     String
+  description String
+  priority    SupportTicketPriority @default(medium)
+  status      SupportTicketStatus   @default(open)
+  createdAt   DateTime              @default(now()) @map("created_at")
+
+  user      User              @relation(fields: [userId], references: [id])
+  responses SupportResponse[]
+}
+
+model SupportResponse {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  userId    Int
+  message   String
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ticket SupportTicket @relation(fields: [ticketId], references: [id])
+  user   User          @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id        Int                @id @default(autoincrement())
+  userId    Int? // Null if it's a system-wide notification
+  message   String
+  type      NotificationType
+  status    NotificationStatus @default(unread)
+  createdAt DateTime           @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model Resource {
+  id          Int      @id @default(autoincrement())
+  title       String
+  fileUrl     String   @map("file_url")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+}
+
+model SystemLog {
+  id        Int      @id @default(autoincrement())
+  adminId   Int
+  action    String
+  timestamp DateTime @default(now())
+
+  admin User @relation("AdminLogs", fields: [adminId], references: [id])
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  orderId   String   @map("order_id")
+  userId    Int
+  rating    Decimal  @default(5.0)
+  comment   String?
+  createdAt DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [orderNumber])
+  user  User  @relation(fields: [userId], references: [id])
+}
